@@ -1,0 +1,7 @@
+Sono disponibili i seguenti comandi:
+!help 			-->	mostra l'elenco dei comandi disponibili
+!register username	-->	registra il client presso il server
+!deregister		-->	de-registra il client presso il server
+!who			-->	mostra l'elenco degli utenti disponibili
+!send username		-->	invia un messaggio ad un altro utente
+!quit			-->	disconnette il client dal server ed esce
