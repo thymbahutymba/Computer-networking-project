@@ -160,7 +160,6 @@ int register_username(int sock, struct users** utenti, char** new_username){
 		perror("Errore nel ricevere l'username");
 		exit(1);
 	}
-	printf("%s", username);
 	// Ricezione indirizzo locale client
 	ip = malloc(16);
 	if(recv(sock, (void*)ip, 16, 0) <0){
