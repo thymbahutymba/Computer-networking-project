@@ -113,12 +113,12 @@ void who_command(int sock, struct users* utenti){
 	uint16_t finito=htons(0);
 	unsigned int status;
 	for(;utenti;utenti=utenti->next_user){
-		lenght = htons(strlen(utenti->username));
+		lenght = htons(strlen(utenti->username)+1);
 		if(send(sock, (void*)&lenght, sizeof(uint16_t),0) <0){
 			perror("Errore nell'inviare la lunghezza dell'username");
 			exit(1);
 		}
-		if(send(sock, (void*)utenti->username, strlen(utenti->username),0) <0){
+		if(send(sock, (void*)utenti->username, strlen(utenti->username)+1,0) <0){
 			perror("Errore nell'inviare l'username");
 			exit(1);
 		}
@@ -145,21 +145,22 @@ int register_username(int sock, struct users** utenti, char** new_username){
 	struct users* tmp=*utenti;
 	struct users* prec=*utenti;
 
+	memset(msg, 0, 50);
+
 	// Ricezione username
 	memset(&lenght, 0, sizeof(lenght));
-	memset(msg, 0, 50);
 	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
 		perror("Errore nel ricevere la lunghezza dell'username");
 		exit(1);
 	}
 
-	username=malloc(ntohs(lenght));
-	memset(username, 0, (ntohs(lenght)));
+	username=malloc(ntohs(lenght)+1);
+	memset(username, 0, (ntohs(lenght))+1);
 	if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
 		perror("Errore nel ricevere l'username");
 		exit(1);
 	}
-
+	printf("%s", username);
 	// Ricezione indirizzo locale client
 	ip = malloc(16);
 	if(recv(sock, (void*)ip, 16, 0) <0){
@@ -183,11 +184,11 @@ int register_username(int sock, struct users** utenti, char** new_username){
 				return 1;
 			}
 
-			strcat(msg, "Riconnessione di ");
-			strcat(msg, tmp->username);
+			sprintf(msg, "Riconnessione di %s", tmp->username);
 			logging(msg);
 
 			*new_username=malloc(strlen(tmp->username));
+			memset(*new_username,0, strlen(tmp->username));
 			memcpy(*new_username, tmp->username, strlen(tmp->username));
 
 			tmp->my_info=malloc(sizeof(struct info_sock));
@@ -219,8 +220,9 @@ int register_username(int sock, struct users** utenti, char** new_username){
 	tmp->my_info->ip = ip;
 	tmp->my_info->port = port;
 
-	strcat(msg, "Nuovo utente registrato, Username: ");
-	strcat(msg, tmp->username);
+	sprintf(msg, "Nuovo utente registrato, Username: %s", tmp->username);
+	//strcat(msg, "Nuovo utente registrato, Username: ");
+	//strcat(msg, tmp->username);
 	logging(msg);
 
 	return 0;

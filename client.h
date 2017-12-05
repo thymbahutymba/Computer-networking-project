@@ -8,4 +8,4 @@
 
 void welcome(const char*,const char*,const char*);
 void stampacomandi();
-void split_command(const char*, char*);
+void split_command(const char*, char**);

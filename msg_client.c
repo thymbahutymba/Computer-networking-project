@@ -1,8 +1,7 @@
 #include "client.h"
-#include <stdbool.h>
 
 #define CMD_SIZE 50
-#define ARGUMENT 1024
+#define BUFFER 1024
 
 int register_user(char*, int, char*, char*);
 void who_command(int);
@@ -11,9 +10,9 @@ void put_command(int, char*);
 int main(int argc, char** argv){
 	int sock;
 	struct sockaddr_in sv_addr;
-	char msg[1024];
+	char msg[BUFFER];
 	char* cmd=malloc(CMD_SIZE);
-	char* arg_command=malloc(ARGUMENT);
+	char* arg_command=NULL;
 	uint16_t lenght;
 	char prompt[50]= "> ";
 
@@ -43,9 +42,9 @@ int main(int argc, char** argv){
 	welcome(argv[3], argv[4], argv[2]);
 
 	while(printf(prompt) && fgets(cmd, CMD_SIZE, stdin)){
-		*(strchr(cmd, '\n'))= '\0';
+		//*(strchr(cmd, '\n'))= '\0';
 
-		split_command(cmd, arg_command);
+		split_command(cmd, &arg_command);
 		put_command(sock, cmd);
 
 		if(!strcmp("!quit\0", cmd)){
@@ -75,17 +74,18 @@ int main(int argc, char** argv){
 			 */
 		
 			if(!arg_command){
-				printf("Hai dimenticato a specificare l'username");
-			}
-			if(register_user(arg_command, sock, argv[1], argv[2])!=1){
+				printf("Hai dimenticato a specificare l'username oppure contiene degli spazi.\n");
+			}else if(register_user(arg_command, sock, argv[1], argv[2])!=1){
 				memset(prompt,0,sizeof(prompt));
-				strcat(prompt, arg_command);
-				strcat(prompt,"> ");
+				sprintf(prompt, "%s> ", arg_command);
 			}
 		}
 
 		memset(cmd, 0, CMD_SIZE);
-		memset(arg_command, 0, ARGUMENT);
+		//memset(arg_command, 0, strlen(arg_command));
+		free(arg_command);
+		arg_command=NULL;
+		//memset(arg_command, 0, BUFFER);
 
 	}
 	close(sock);
@@ -118,7 +118,7 @@ void who_command(int sock){
 	strcpy(status[1], "Online");
 
 	printf("Client registrati:\n");
-	while(true){
+	while(1){
 		if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
 			perror("Errore nel ricevere la lunghezza dell'username");
 			exit(1);
@@ -164,13 +164,7 @@ int register_user(char* arg_command, int sock, char* ip, char* port){
 		perror("Errore nell'invio dell'IP");
 		exit(1);
 	}
-/*
-	lenght = htons(strlen(port));
-	if(send(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
-		perror("Errore nell'invio della lunghezza della porta");
-		exit(1);
-	}
-	*/
+	
 	ptnet = htons(*port);
 	if(send(sock, (void*)&ptnet, sizeof(uint16_t),0) <0){
 		perror("Errore nell'invio della porta");
@@ -195,21 +189,28 @@ int register_user(char* arg_command, int sock, char* ip, char* port){
 	return result;
 }
 
-void split_command(const char* command, char* arg_command){
+void split_command(const char* command, char** arg_command){
 	char* tmp;
+	
+	*(strchr(command, '\n'))='\0';
 
 	//First occurence of ' ', replace with end of string terminator
 	tmp = strchr(command, ' ');
 	if(tmp)
 		*tmp='\0';
 	else{
-		//*arg_command=NULL,
 		return;
 	}
 
+	//L'username non puo` contenere spazi
+	if(strchr(tmp+1,' ')){
+		return;
+	}
+	
 	//Copy argument of command
-	memcpy((void*)arg_command, (void*)(tmp+1), strlen(tmp+1));
-	memset(tmp+1, 0, strlen(tmp+1));
+	*arg_command=malloc(strlen(tmp+1));
+	memcpy((void*)*arg_command, (void*)(tmp+1), strlen(tmp+1));
+	//memset(tmp+1, 0, strlen(tmp+1));
 }
 
 void stampacomandi(){
@@ -218,6 +219,7 @@ void stampacomandi(){
 	while(fgets(str, 80, comandi)){
 		printf("%s", str);
 	}
+	memset(&str,0,80);
 	fclose(comandi);
 	printf("\n");
 	return;
