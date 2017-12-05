@@ -17,7 +17,7 @@ int main(int argc, char** argv){
 
 	listener = socket(AF_INET, SOCK_STREAM, 0);
 	close(listener);
-//	close(listener);
+	close(listener);
 	close(listener);
 	listener = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -64,7 +64,9 @@ int main(int argc, char** argv){
 					logging("Nuovo client connesso");
 
 				}else{
+					memset(buffer, 0, BUFFER_SIZE);
 					get_command(i, buffer);
+
 					if(!strcmp(buffer,"!register\0")){
 						result = register_username(i, &utenti, &new_username);
 						s = htons(result);
@@ -83,9 +85,6 @@ int main(int argc, char** argv){
 					//close(i);
 					//FD_CLR(i, &master);
 				}
-
-				// Reset del buffer
-				memset(buffer, 0, BUFFER_SIZE);
 			}
 		}
 	}
@@ -94,10 +93,11 @@ int main(int argc, char** argv){
 
 void get_command(int sock, char* buffer){
 	uint16_t lenght;
-
+	memset(&lenght, 0, sizeof(uint16_t));
 	//Get lenght of command
-	if(recv(sock, (void*)&lenght, sizeof(lenght), 0)<0){
+	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0)<0){
 		perror("Errore nel ricevere la lunghezza del comando");
+		exit(1);
 	}
 
 	//Get command
@@ -111,7 +111,7 @@ void get_command(int sock, char* buffer){
 void who_command(int sock, struct users* utenti){
 	uint16_t lenght;
 	uint16_t finito=htons(0);
-
+	unsigned int status;
 	for(;utenti;utenti=utenti->next_user){
 		lenght = htons(strlen(utenti->username));
 		if(send(sock, (void*)&lenght, sizeof(uint16_t),0) <0){
@@ -122,9 +122,14 @@ void who_command(int sock, struct users* utenti){
 			perror("Errore nell'inviare l'username");
 			exit(1);
 		}
+
+		status=(utenti->my_info==NULL)?htons(0):htons(1);
+
+		if(send(sock, (void*)&status, sizeof(unsigned int), 0) <0)
+			perror("Errore nell'invio dello status");
 	}
 	if(send(sock, (void*)&finito, sizeof(uint16_t), 0) <0){
-		perror("Errore nell'invio della fine username");
+		perror("Errore nell'invio della fine !who");
 		exit(1);
 	}
 
@@ -142,13 +147,14 @@ int register_username(int sock, struct users** utenti, char** new_username){
 
 	// Ricezione username
 	memset(&lenght, 0, sizeof(lenght));
-	if(recv(sock, (void*)&lenght, sizeof(lenght), 0) <0){
+	memset(msg, 0, 50);
+	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
 		perror("Errore nel ricevere la lunghezza dell'username");
 		exit(1);
 	}
 
 	username=malloc(ntohs(lenght));
-	memset(username, 0, ntohs(lenght));
+	memset(username, 0, (ntohs(lenght)));
 	if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
 		perror("Errore nel ricevere l'username");
 		exit(1);

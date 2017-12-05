@@ -109,9 +109,17 @@ void put_command(int sock, char* buffer){
 void who_command(int sock){
 	uint16_t lenght;
 	char* username;
-	printf("Start who\n");
+	unsigned int i_status;
+	
+	char** status=malloc(sizeof(char*));
+	status[0]=malloc(strlen("Offline"));
+	status[1]=malloc(strlen("Online"));
+	strcpy(status[0], "Offline");
+	strcpy(status[1], "Online");
+
+	printf("Client registrati:\n");
 	while(true){
-		if(recv(sock, &lenght, sizeof(uint16_t), 0) <0){
+		if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
 			perror("Errore nel ricevere la lunghezza dell'username");
 			exit(1);
 		}
@@ -119,13 +127,20 @@ void who_command(int sock){
 			break;
 		username=malloc(ntohs(lenght));
 		memset(username, 0, ntohs(lenght));
-		if(recv(sock, (void*)&username, ntohs(lenght), 0) <0){
+		if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
 			perror("Errore nel ricevere l'username");
 			exit(1);
 		}
-		printf("\t%s", username);
+		memset(&i_status, 0, sizeof(unsigned int));
+		if(recv(sock, (void*)&i_status, sizeof(unsigned int),0) <0)
+			perror("Errore nel ricevere lo status dell'utente");
+
+		printf("\t%s (%s)\n", username, status[ntohs(i_status)]);
 		free(username);
 	}
+	free(status[0]);
+	free(status[1]);
+	free(status);
 }
 
 
@@ -134,12 +149,12 @@ int register_user(char* arg_command, int sock, char* ip, char* port){
 	int result;
 
 	// Send Username to server
-	lenght = htons(strlen(arg_command));
+	lenght = htons(strlen(arg_command)+1);
 	if(send(sock, (void*)&lenght, sizeof(uint16_t), 0) < 0){
 		perror("Errore nell'invio della lunghezza dell'username");
 		exit(1);
 	}
-	if(send(sock,(void*)arg_command, strlen(arg_command), 0) < 0){
+	if(send(sock,(void*)arg_command, strlen(arg_command)+1, 0) < 0){
 		perror("Error nell'invio dell'username");
 		exit(1);
 	}
@@ -180,7 +195,7 @@ int register_user(char* arg_command, int sock, char* ip, char* port){
 	return result;
 }
 
-void split_command(const char* command, const char* arg_command){
+void split_command(const char* command, char* arg_command){
 	char* tmp;
 
 	//First occurence of ' ', replace with end of string terminator
@@ -188,6 +203,7 @@ void split_command(const char* command, const char* arg_command){
 	if(tmp)
 		*tmp='\0';
 	else{
+		//*arg_command=NULL,
 		return;
 	}
 
