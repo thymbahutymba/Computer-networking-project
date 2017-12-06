@@ -10,10 +10,8 @@ void put_command(int, char*);
 int main(int argc, char** argv){
 	int sock;
 	struct sockaddr_in sv_addr;
-	char msg[BUFFER];
 	char* cmd=malloc(CMD_SIZE);
 	char* arg_command=NULL;
-	uint16_t lenght;
 	char prompt[50]= "> ";
 
 	if(argc!=5){
