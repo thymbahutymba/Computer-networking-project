@@ -2,6 +2,7 @@
 
 void get_command(int, char*);
 void who_command(int, struct users*);
+void quit_command(int, struct users*);
 
 int main(int argc, char** argv){
 
@@ -81,15 +82,49 @@ int main(int argc, char** argv){
 
 					}else if(!strcmp(buffer, "!who\0")){
 						who_command(i, utenti);
+					}else if(!strcmp(buffer, "!quit\0")){
+						
+						quit_command(i, utenti);
+						close(i);
+						FD_CLR(i, &master);	
 					}
-					//close(i);
-					//FD_CLR(i, &master);
 				}
 			}
 		}
 	}
 	close(listener);
 }
+
+void quit_command(int sock, struct users* utenti){
+	uint16_t lenght;
+	char* username;
+	char buffer[1024];
+	// Get Username
+	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
+		perror("Errore nel ricevere la lunghezza dell'username");
+	}
+	
+	if(ntohs(lenght)){
+		username=malloc(ntohs(lenght)+1);
+		memset(username, 0, (ntohs(lenght))+1);
+		if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
+			perror("Errore nel ricevere l'username");
+		}
+
+		for(;utenti;utenti=utenti->next_user){
+			if(!strcmp(username,utenti->username))
+				break;
+		}
+		free(utenti->my_info);
+		utenti->my_info=NULL;
+		utenti->first_msg=malloc(sizeof(struct msg_offline));
+		sprintf(buffer, "Disconnessione di: %s", username);
+		logging(buffer);
+		return;
+	}
+	logging("Disconnessione di un client non registrato");
+}
+
 
 void get_command(int sock, char* buffer){
 	uint16_t lenght;

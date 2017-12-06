@@ -13,6 +13,8 @@ int main(int argc, char** argv){
 	char* cmd=malloc(CMD_SIZE);
 	char* arg_command=NULL;
 	char prompt[50]= "> ";
+	char* username=NULL;
+	uint16_t lenght;
 
 	if(argc!=5){
 		printf("Hai dimenticato qualche argomento, la sintassi è:\n");
@@ -50,13 +52,28 @@ int main(int argc, char** argv){
 			 * Quit command
 			 */
 
+			// Send Username if registered
+			
+			lenght = (username)?htons(strlen(username)+1):htons(0);
+			if(send(sock, (void*)&lenght, sizeof(uint16_t), 0) < 0){
+				perror("Errore nell'invio della lunghezza dell'username");
+				exit(1);
+			}
+			if(ntohs(lenght)){
+				if(send(sock,(void*)username, strlen(username)+1, 0) < 0){
+					perror("Error nell'invio dell'username");
+					exit(1);
+				}
+			}
+			free(cmd);
+			free(username);
 			close(sock);
+			printf("\nClient Disconnesso\n");
 			exit(0);
 		}else if(!strcmp("!help\0", cmd)){
 			/*
 			 * Help command
 			 */
-
 			stampacomandi();
 
 		}else if(!strcmp("!who\0", cmd)){
@@ -76,6 +93,8 @@ int main(int argc, char** argv){
 			}else if(register_user(arg_command, sock, argv[1], argv[2])!=1){
 				memset(prompt,0,sizeof(prompt));
 				sprintf(prompt, "%s> ", arg_command);
+				username = malloc(strlen(arg_command));
+				sprintf(username, "%s", arg_command);
 			}
 		}
 
@@ -88,6 +107,7 @@ int main(int argc, char** argv){
 	}
 	close(sock);
 }
+
 
 void put_command(int sock, char* buffer){
 
