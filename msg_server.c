@@ -1,11 +1,6 @@
 #include "server.h"
 
-void get_command(int, char*);
-void who_command(int, struct users*);
-void quit_command(int, struct users*);
-
 int main(int argc, char** argv){
-
 	int listener, new_sock;
 	struct sockaddr_in my_addr;
 	struct sockaddr_in cl_addr;
@@ -24,7 +19,6 @@ int main(int argc, char** argv){
 
 	FD_ZERO(&master);
 	FD_ZERO(&master_cpy);
-
 	memset(&my_addr, 0, sizeof(my_addr));
 
 	my_addr.sin_family=AF_INET;
@@ -87,6 +81,8 @@ int main(int argc, char** argv){
 						quit_command(i, utenti);
 						close(i);
 						FD_CLR(i, &master);	
+					}else if(!strcmp(buffer, "!deregister\0")){
+						deregister_command(i, &utenti);
 					}
 				}
 			}
@@ -95,22 +91,53 @@ int main(int argc, char** argv){
 	close(listener);
 }
 
-void quit_command(int sock, struct users* utenti){
+void deregister_command(int sock, struct users** utenti){
+	char* username=receive_username(sock);
+	struct users* tmp=*utenti;
+	struct users* prec=*utenti;
+	char buffer[BUFFER_SIZE];
+
+	for(;tmp;prec=tmp, tmp=tmp->next_user)
+		if(!strcmp(username,tmp->username))
+			break;
+
+	if(tmp==*utenti)
+		*utenti=tmp->next_user;
+	else
+		prec->next_user=tmp->next_user;
+
+	free(tmp->username);
+	free(tmp->my_info->ip);
+	sprintf(buffer, "Utente %s deregistrato", username);
+	free(username);
+
+	logging(buffer);
+}
+
+char* receive_username(int sock){
 	uint16_t lenght;
-	char* username;
-	char buffer[1024];
-	// Get Username
+	char* username=NULL;
+
 	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
 		perror("Errore nel ricevere la lunghezza dell'username");
 	}
-	
+
 	if(ntohs(lenght)){
-		username=malloc(ntohs(lenght)+1);
-		memset(username, 0, (ntohs(lenght))+1);
+		username=malloc(ntohs(lenght));
+		memset(username, 0, (ntohs(lenght)));
 		if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
 			perror("Errore nel ricevere l'username");
 		}
+	}
+	return username;
+}
 
+void quit_command(int sock, struct users* utenti){
+	char* username;
+	char buffer[BUFFER_SIZE];
+	
+	username=receive_username(sock);
+	if(username){
 		for(;utenti;utenti=utenti->next_user){
 			if(!strcmp(username,utenti->username))
 				break;
@@ -129,6 +156,7 @@ void quit_command(int sock, struct users* utenti){
 void get_command(int sock, char* buffer){
 	uint16_t lenght;
 	memset(&lenght, 0, sizeof(uint16_t));
+
 	//Get lenght of command
 	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0)<0){
 		perror("Errore nel ricevere la lunghezza del comando");
@@ -144,16 +172,18 @@ void get_command(int sock, char* buffer){
 }
 
 void who_command(int sock, struct users* utenti){
-	uint16_t lenght;
+	uint16_t lenght, lentc;
 	uint16_t finito=htons(0);
 	unsigned int status;
+
 	for(;utenti;utenti=utenti->next_user){
-		lenght = htons(strlen(utenti->username)+1);
+		lentc=strlen(utenti->username)+1;
+		lenght = htons(lentc);
 		if(send(sock, (void*)&lenght, sizeof(uint16_t),0) <0){
 			perror("Errore nell'inviare la lunghezza dell'username");
 			exit(1);
 		}
-		if(send(sock, (void*)utenti->username, strlen(utenti->username)+1,0) <0){
+		if(send(sock, (void*)utenti->username, lentc,0) <0){
 			perror("Errore nell'inviare l'username");
 			exit(1);
 		}
@@ -172,7 +202,6 @@ void who_command(int sock, struct users* utenti){
 }
 
 int register_username(int sock, struct users** utenti, char** new_username){
-	uint16_t lenght;
 	char* username;
 	uint16_t port;
 	char* ip;
@@ -182,19 +211,8 @@ int register_username(int sock, struct users** utenti, char** new_username){
 
 	memset(msg, 0, 50);
 
-	// Ricezione username
-	memset(&lenght, 0, sizeof(lenght));
-	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
-		perror("Errore nel ricevere la lunghezza dell'username");
-		exit(1);
-	}
+	username=receive_username(sock);
 
-	username=malloc(ntohs(lenght)+1);
-	memset(username, 0, (ntohs(lenght))+1);
-	if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
-		perror("Errore nel ricevere l'username");
-		exit(1);
-	}
 	// Ricezione indirizzo locale client
 	ip = malloc(16);
 	if(recv(sock, (void*)ip, 16, 0) <0){
@@ -222,8 +240,8 @@ int register_username(int sock, struct users** utenti, char** new_username){
 			logging(msg);
 
 			*new_username=malloc(strlen(tmp->username));
-			memset(*new_username,0, strlen(tmp->username));
-			memcpy(*new_username, tmp->username, strlen(tmp->username));
+			memset(*new_username,0, strlen(tmp->username)+1);
+			sprintf(*new_username, "%s", tmp->username);
 
 			tmp->my_info=malloc(sizeof(struct info_sock));
 			memset(tmp->my_info, 0, sizeof(struct info_sock));
@@ -254,9 +272,11 @@ int register_username(int sock, struct users** utenti, char** new_username){
 	tmp->my_info->ip = ip;
 	tmp->my_info->port = port;
 
+	*new_username=malloc(strlen(tmp->username));
+	memset(*new_username,0, strlen(tmp->username)+1);
+	sprintf(*new_username, "%s", tmp->username);
+
 	sprintf(msg, "Nuovo utente registrato, Username: %s", tmp->username);
-	//strcat(msg, "Nuovo utente registrato, Username: ");
-	//strcat(msg, tmp->username);
 	logging(msg);
 
 	return 0;
