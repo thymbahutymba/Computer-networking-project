@@ -144,7 +144,6 @@ void send_command(int sock, struct users* utenti){
 	unsigned int trovato=0;
 	char msg[BUFFER_SIZE];
 	char* buffer;
-	uint16_t ptos;
 	struct msg *new_msg=NULL;
 	struct msg *tmp_msg=NULL;
 
@@ -231,7 +230,7 @@ void send_command(int sock, struct users* utenti){
 			append->msg->next=NULL;
 
 		}
-		sprintf(msg, "Ricezione messaggio da %s per %s", sender, username);
+		sprintf(msg, "Ricezione messaggio offline da %s per %s", sender, username);
 		logging(msg);
 	}else{
 		send_uint(sock, 2);
@@ -241,7 +240,7 @@ void send_command(int sock, struct users* utenti){
 		//Invio della porta
 		send_uint(sock,to_send->my_info->port);
 		
-		sprintf(msg, "Invio informazioni per messaggio instantaneo verso %s", username);
+		sprintf(msg, "Invio IP e Porta di %s per lo scambio di messaggi instantanei", username);
 		logging(msg);
 	}
 	free(username);

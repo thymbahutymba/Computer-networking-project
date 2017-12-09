@@ -2,7 +2,7 @@
 #include "client.h"
 
 #define BUFFER_SIZE 1024
-void receive_udp(char*, char*);
+void receive_udp(char*, char*, char**);
 void send_offline(int, char*);
 void receive_offmessage(int);
 
@@ -15,6 +15,7 @@ int main(int argc, char** argv){
 	char prompt[50]= "> ";
 	char* username=NULL;
 	pid_t pid;
+	char** tofork=&username;
 
 	if(argc!=5){
 		printf("Hai dimenticato qualche argomento, la sintassi è:\n");
@@ -48,7 +49,7 @@ int main(int argc, char** argv){
 	pid = fork();
 	if(!pid){
 		close(sock);
-		receive_udp(argv[1], argv[2]);
+		receive_udp(argv[1], argv[2], tofork);
 	}
 
 	while(printf(prompt) && fgets(cmd, CMD_SIZE, stdin)){
@@ -222,11 +223,10 @@ void send_offline(int sock, char* sender){
 }
 	
 
-void receive_udp(char* ip, char* port){
-	struct sockaddr_in my_addr, cl_addr;
+void receive_udp(char* ip, char* port, char** my_name){
+	struct sockaddr_in my_addr;
 	int sock;
 	char *buffer, *username=NULL;
-	//unsigned int len = sizeof(cl_addr);
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	memset(&my_addr, 0, sizeof(my_addr));
@@ -236,11 +236,12 @@ void receive_udp(char* ip, char* port){
 	if(bind(sock, (struct sockaddr*)&my_addr, sizeof(my_addr)) <0)
 		perror("Errore nel bindare il socket UDP");
 
-	while(username=receive_username(sock)){
+	while((username=receive_username(sock))){
 		buffer = receive_str(sock);
-		printf("%s (msg instantaneo)>\n%s", username, buffer);
+		printf("\n%s (msg instantaneo)>\n%s", username, buffer);
 		free(username);
 		free(buffer);
+		printf("%s> \n", *my_name);
 	}
 }
 
