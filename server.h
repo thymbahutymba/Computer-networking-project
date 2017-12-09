@@ -1,10 +1,10 @@
-#include <stdio.h>
+//#include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
-#include <string.h>
+//#include <arpa/inet.h>
+//#include <string.h>
 #include <unistd.h>
-#include <stdlib.h>
+//#include <stdlib.h>
 #include <time.h>
 
 #define BUFFER_SIZE 1024
@@ -33,7 +33,6 @@ int register_username(int, struct users**, char**);
 void get_command(int, char*);
 void who_command(int, struct users*);
 void quit_command(int, struct users*);
-char* receive_username(int);
 void deregister_command(int, struct users**);
 
 

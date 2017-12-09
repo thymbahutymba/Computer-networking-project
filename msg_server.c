@@ -1,4 +1,7 @@
+#include "condivisi.h"
 #include "server.h"
+
+void send_command(int, struct users*);
 
 int main(int argc, char** argv){
 	int listener, new_sock;
@@ -83,12 +86,102 @@ int main(int argc, char** argv){
 						FD_CLR(i, &master);	
 					}else if(!strcmp(buffer, "!deregister\0")){
 						deregister_command(i, &utenti);
+					}else if(!strcmp(buffer, "!send\0")){
+						send_command(i, utenti);
 					}
 				}
 			}
 		}
 	}
 	close(listener);
+}
+
+void send_command(int sock, struct users* utenti){
+	char *username, *sender;
+	struct msg_offline *append=NULL, *search, *prec;
+	struct users* to_send=NULL;
+	unsigned int trovato=0, status;
+	char msg[BUFFER_SIZE];
+	char* buffer;
+	uint16_t lenght, len, ptos;
+
+	// Destinatario del messaggio
+	username=receive_username(sock);
+	sprintf(msg, "Destinatario del messaggio %s", username);
+	logging(msg);
+
+	// Ricerca utente
+	for(;utenti;utenti=utenti->next_user){
+		if(!strcmp(utenti->username, username)){
+			to_send = utenti;
+			trovato=1;
+			break;
+		}
+	}
+
+	// Utente non registrato
+	if(!trovato){
+		status=htons(0);
+		if(send(sock, &status, sizeof(status), 0) <0){
+			perror("Errore nell'invio dello status.");
+		}
+		sprintf(msg, "Tentativo di invio messaggio a username (%s) inesistente.", username);
+		logging(msg);
+		return;
+	}
+
+	// Utente non loggato
+	if(to_send->my_info==NULL){
+		status=htons(1);
+		if(send(sock, &status, sizeof(status), 0) <0){
+			perror("Errore nell'invio dello status.");
+		}
+		
+		// Ricezione del mittente
+		sender = receive_username(sock);
+
+		// Salvo messaggio offline
+		if(recv(sock, &lenght, sizeof(uint16_t), 0) <0){
+			perror("Errore nel ricevere la lunghezza del messaggio");
+		}
+
+		buffer=malloc(ntohs(lenght));
+		if(recv(sock, buffer, ntohs(lenght), 0) <0)
+			perror("Errore nel ricevere il messaggio");
+
+		prec=search=to_send->first_msg;
+		for(;search; prec=search, search=search->next_msg)
+			if(!strcmp(search->username, sender)){
+				append=search;
+				break;
+		}
+
+		if(append){
+			//Sender già registrato
+			append->msg[append->count++]=buffer;
+			free(sender);
+		}else{
+			// Nuovo sender
+			prec->next_msg=malloc(sizeof(struct msg_online*));
+			prec->next_msg->username=sender;
+			prec->next_msg->msg[prec->next_msg->count++]=buffer;
+			prec->next_msg->next_msg=NULL;
+		}
+		sprintf(msg, "Ricezione messaggio instantaneo da %s per %s", sender, username);
+		logging(msg);
+		free(username);
+	}else{
+		len = sizeof(to_send->my_info->ip);
+		lenght = htons(len);
+		if(send(sock, &lenght, sizeof(uint16_t), 0) <0)
+			perror("Errore invio lunghezza ip");
+		if(send(sock, to_send->my_info->ip, len, 0 ) <0)
+			perror("Errore nell'invio dell'IP");
+		ptos = htons(to_send->my_info->port);
+		if(send(sock, &ptos, sizeof(uint16_t), 0)<0)
+			perror("Errore nell'invio della porta");
+		
+	}
 }
 
 void deregister_command(int sock, struct users** utenti){
@@ -113,7 +206,7 @@ void deregister_command(int sock, struct users** utenti){
 
 	logging(buffer);
 }
-
+/*
 char* receive_username(int sock){
 	uint16_t lenght;
 	char* username=NULL;
@@ -131,7 +224,7 @@ char* receive_username(int sock){
 	}
 	return username;
 }
-
+*/
 void quit_command(int sock, struct users* utenti){
 	char* username;
 	char buffer[BUFFER_SIZE];
