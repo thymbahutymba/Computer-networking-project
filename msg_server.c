@@ -7,7 +7,7 @@ int main(int argc, char** argv){
 	int listener, new_sock;
 	struct sockaddr_in my_addr;
 	struct sockaddr_in cl_addr;
-	int i, fdmax, result, s;
+	int i, fdmax, result;
 	unsigned int addrlen;
 	char buffer[BUFFER_SIZE];
 	fd_set master, master_cpy;	//set di socket per la listen
@@ -67,14 +67,15 @@ int main(int argc, char** argv){
 
 					if(!strcmp(buffer,"!register\0")){
 						result = register_username(i, &utenti, &new_username);
-						s = htons(result);
+						send_uint(i, result);
+						/*s = htons(result);
 						if(send(i, (void*)&s, sizeof(int), 0)<0){
 							perror("Errore in risposta allla richiesta di registrazione");
 							exit(1);
-						}
+						}*/
 						if(result==2){
 							//TODO Invio messaggi se riconnession
-							//send_message(i, new_username);
+							send_offmessage(i, new_username, utenti);
 						}
 
 					}else if(!strcmp(buffer, "!who\0")){
@@ -96,17 +97,60 @@ int main(int argc, char** argv){
 	close(listener);
 }
 
+void send_offmessage(int sock, char* username, struct users* utenti){
+	struct msg_offline *fromuser, *deleteuser;
+	struct msg *message, *deletemsg;
+
+	for(;utenti;utenti=utenti->next_user)
+		if(!strcmp(utenti->username, username))
+			break;
+	
+	fromuser=utenti->first_msg;
+	utenti->first_msg=NULL;
+
+	// Per ogni utente che ha inviato un messaggio
+	while(fromuser){
+		send_uint(sock, 1);
+		send_username(sock, fromuser->username);
+		message=fromuser->msg;
+		while(message){
+			// Invio testo del messaggio
+			send_uint(sock,1);
+			send_str(sock, message->text);
+
+			// Cancello il messaggio
+			deletemsg=message;
+			message=message->next;
+			free(deletemsg);
+		}
+		// Segnale di fine messaggi per utente
+		send_uint(sock, 0);
+		
+		// Cancello utente dalla lista
+		deleteuser=fromuser;
+		fromuser=fromuser->next_msg;
+		free(deleteuser);
+	}
+	
+	// Fine messaggi
+	send_uint(sock, 0);
+	
+}
+
 void send_command(int sock, struct users* utenti){
 	char *username, *sender;
 	struct msg_offline *append=NULL, *search, *prec;
 	struct users* to_send=NULL;
-	unsigned int trovato=0, status;
+	unsigned int trovato=0;
 	char msg[BUFFER_SIZE];
 	char* buffer;
-	uint16_t lenght, len, ptos;
+	uint16_t ptos;
+	struct msg *new_msg=NULL;
+	struct msg *tmp_msg=NULL;
 
 	// Destinatario del messaggio
 	username=receive_username(sock);
+
 	sprintf(msg, "Destinatario del messaggio %s", username);
 	logging(msg);
 
@@ -121,74 +165,93 @@ void send_command(int sock, struct users* utenti){
 
 	// Utente non registrato
 	if(!trovato){
-		status=htons(0);
-		if(send(sock, &status, sizeof(status), 0) <0){
-			perror("Errore nell'invio dello status.");
-		}
 		sprintf(msg, "Tentativo di invio messaggio a username (%s) inesistente.", username);
 		logging(msg);
+		free(username);
+		send_uint(sock, 0);
 		return;
 	}
 
 	// Utente non loggato
 	if(to_send->my_info==NULL){
-		status=htons(1);
-		if(send(sock, &status, sizeof(status), 0) <0){
-			perror("Errore nell'invio dello status.");
-		}
-		
+
+		send_uint(sock, 1);
+
 		// Ricezione del mittente
 		sender = receive_username(sock);
 
-		// Salvo messaggio offline
-		if(recv(sock, &lenght, sizeof(uint16_t), 0) <0){
-			perror("Errore nel ricevere la lunghezza del messaggio");
-		}
+		// Ricezione messaggio offline
+		buffer=receive_str(sock);
 
-		buffer=malloc(ntohs(lenght));
-		if(recv(sock, buffer, ntohs(lenght), 0) <0)
-			perror("Errore nel ricevere il messaggio");
-
+		// Ricerca utente fra i messaggi già ricevuti
 		prec=search=to_send->first_msg;
 		for(;search; prec=search, search=search->next_msg)
 			if(!strcmp(search->username, sender)){
 				append=search;
 				break;
 		}
-
+		
 		if(append){
-			//Sender già registrato
-			append->msg[append->count++]=buffer;
+			/*
+			 * Sender già presente
+			 */
+			// Ricerca ultimo messaggio
+			tmp_msg=append->msg;
+			for(new_msg=tmp_msg; tmp_msg; new_msg=tmp_msg, tmp_msg=tmp_msg->next);
+
+			if(tmp_msg==append->msg){
+				// Nessun messaggio presente
+				append->msg=malloc(sizeof(struct msg));
+				tmp_msg=append->msg;
+			}else{
+				// Aggiungo in coda il messaggio
+				new_msg->next=malloc(sizeof(struct msg));
+				tmp_msg=new_msg->next;
+			}
+			tmp_msg->text=buffer;
+			tmp_msg->next=NULL;
 			free(sender);
 		}else{
-			// Nuovo sender
-			prec->next_msg=malloc(sizeof(struct msg_online*));
-			prec->next_msg->username=sender;
-			prec->next_msg->msg[prec->next_msg->count++]=buffer;
-			prec->next_msg->next_msg=NULL;
+			/*
+			 * Nuovo sender
+			 */
+			if(!to_send->first_msg){
+				// Aggiunta in testa fra tutti i messaggi offline
+				to_send->first_msg=malloc(sizeof(struct msg_offline));
+				append=to_send->first_msg;
+			}else{
+				// Aggiunta in coda fra tutti i messaggi offline
+				prec->next_msg=malloc(sizeof(struct msg_offline));
+				append=prec->next_msg;
+			}
+			append->username=sender;
+			append->next_msg=NULL;
+			append->msg=malloc(sizeof(struct msg));
+			append->msg->text=buffer;
+			append->msg->next=NULL;
+
 		}
-		sprintf(msg, "Ricezione messaggio instantaneo da %s per %s", sender, username);
+		sprintf(msg, "Ricezione messaggio da %s per %s", sender, username);
 		logging(msg);
-		free(username);
 	}else{
-		len = sizeof(to_send->my_info->ip);
-		lenght = htons(len);
-		if(send(sock, &lenght, sizeof(uint16_t), 0) <0)
-			perror("Errore invio lunghezza ip");
-		if(send(sock, to_send->my_info->ip, len, 0 ) <0)
-			perror("Errore nell'invio dell'IP");
-		ptos = htons(to_send->my_info->port);
-		if(send(sock, &ptos, sizeof(uint16_t), 0)<0)
-			perror("Errore nell'invio della porta");
+		send_uint(sock, 2);
+
+		//Invio dell'indirizzo ip
+		send_str(sock, to_send->my_info->ip);
+		//Invio della porta
+		send_uint(sock,to_send->my_info->port);
 		
+		sprintf(msg, "Invio informazioni per messaggio instantaneo verso %s", username);
+		logging(msg);
 	}
+	free(username);
 }
 
 void deregister_command(int sock, struct users** utenti){
 	char* username=receive_username(sock);
 	struct users* tmp=*utenti;
 	struct users* prec=*utenti;
-	char buffer[BUFFER_SIZE];
+	char msg[BUFFER_SIZE];
 
 	for(;tmp;prec=tmp, tmp=tmp->next_user)
 		if(!strcmp(username,tmp->username))
@@ -201,33 +264,15 @@ void deregister_command(int sock, struct users** utenti){
 
 	free(tmp->username);
 	free(tmp->my_info->ip);
-	sprintf(buffer, "Utente %s deregistrato", username);
+	sprintf(msg, "Utente %s deregistrato", username);
 	free(username);
 
-	logging(buffer);
+	logging(msg);
 }
-/*
-char* receive_username(int sock){
-	uint16_t lenght;
-	char* username=NULL;
 
-	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
-		perror("Errore nel ricevere la lunghezza dell'username");
-	}
-
-	if(ntohs(lenght)){
-		username=malloc(ntohs(lenght));
-		memset(username, 0, (ntohs(lenght)));
-		if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
-			perror("Errore nel ricevere l'username");
-		}
-	}
-	return username;
-}
-*/
 void quit_command(int sock, struct users* utenti){
 	char* username;
-	char buffer[BUFFER_SIZE];
+	char msg[BUFFER_SIZE];
 	
 	username=receive_username(sock);
 	if(username){
@@ -237,9 +282,9 @@ void quit_command(int sock, struct users* utenti){
 		}
 		free(utenti->my_info);
 		utenti->my_info=NULL;
-		utenti->first_msg=malloc(sizeof(struct msg_offline));
-		sprintf(buffer, "Disconnessione di: %s", username);
-		logging(buffer);
+		utenti->first_msg=NULL; 
+		sprintf(msg, "Disconnessione di: %s", username);
+		logging(msg);
 		return;
 	}
 	logging("Disconnessione di un client non registrato");
@@ -265,33 +310,18 @@ void get_command(int sock, char* buffer){
 }
 
 void who_command(int sock, struct users* utenti){
-	uint16_t lenght, lentc;
-	uint16_t finito=htons(0);
 	unsigned int status;
 
 	for(;utenti;utenti=utenti->next_user){
-		lentc=strlen(utenti->username)+1;
-		lenght = htons(lentc);
-		if(send(sock, (void*)&lenght, sizeof(uint16_t),0) <0){
-			perror("Errore nell'inviare la lunghezza dell'username");
-			exit(1);
-		}
-		if(send(sock, (void*)utenti->username, lentc,0) <0){
-			perror("Errore nell'inviare l'username");
-			exit(1);
-		}
+		// Segnale per invio username
+		send_uint(sock, 1);
+		send_username(sock, utenti->username);
 
-		status=(utenti->my_info==NULL)?htons(0):htons(1);
-
-		if(send(sock, (void*)&status, sizeof(unsigned int), 0) <0)
-			perror("Errore nell'invio dello status");
+		// Status dell'utente
+		status=(utenti->my_info==NULL)?0:1;
+		send_uint(sock, status);
 	}
-	if(send(sock, (void*)&finito, sizeof(uint16_t), 0) <0){
-		perror("Errore nell'invio della fine !who");
-		exit(1);
-	}
-
-
+	send_uint(sock, 0);
 }
 
 int register_username(int sock, struct users** utenti, char** new_username){

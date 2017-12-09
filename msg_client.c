@@ -4,10 +4,11 @@
 #define BUFFER_SIZE 1024
 void receive_udp(char*, char*);
 void send_offline(int, char*);
+void receive_offmessage(int);
 
 int main(int argc, char** argv){
 	int sock;
-	unsigned int status;
+	//unsigned int status;
 	struct sockaddr_in sv_addr;
 	char* cmd=malloc(CMD_SIZE);
 	char* arg_command=NULL;
@@ -48,7 +49,6 @@ int main(int argc, char** argv){
 	if(!pid){
 		close(sock);
 		receive_udp(argv[1], argv[2]);
-		//while(1);
 	}
 
 	while(printf(prompt) && fgets(cmd, CMD_SIZE, stdin)){
@@ -62,8 +62,8 @@ int main(int argc, char** argv){
 			 * Quit command
 			 */
 			send_username(sock, username);
-			free(cmd);
-			free(username);
+			if(username)
+				free(username);
 			close(sock);
 			printf("\nClient Disconnesso\n");
 			exit(0);
@@ -81,13 +81,20 @@ int main(int argc, char** argv){
 
 			who_command(sock, username);
 		}else if(!strcmp("!register\0", cmd)){
+			
 			/*
 			 * Register command
 			 */
-		
 			if(!arg_command){
 				printf("Hai dimenticato a specificare l'username oppure contiene degli spazi.\n");
-			}else if(register_user(arg_command, sock, argv[1], argv[2])!=1){
+			}else{
+				switch(register_user(arg_command, sock, argv[1], argv[2])){
+					case 1:
+						break;
+					case 2:
+						receive_offmessage(sock);
+						break;
+				}
 				memset(prompt,0,strlen(prompt));
 				sprintf(prompt, "%s> ", arg_command);
 				username = malloc(strlen(arg_command));
@@ -115,16 +122,16 @@ int main(int argc, char** argv){
 
 			// Invio destinatario del messaggio
 			send_username(sock, arg_command);
-
-			if(recv(sock, &status, sizeof(unsigned int), 0) <0)
-				perror("Errore nella ricezione dello status");
-			switch (ntohs(status)){
+			switch (receive_uint(sock)){
 				case 0:
 					printf("Impossibile connettersi a %s: utente inesistente\n", arg_command);
 					break;
 				case 1:
 					send_offline(sock, username);
-					printf("Messaggio instantaneo inviato con successo");
+					printf("Messaggio inviato con successo\n");
+					break;
+				case 2:
+					send_online(sock, username);
 					break;
 			}
 		}
@@ -135,38 +142,91 @@ int main(int argc, char** argv){
 	}
 }
 
-void send_offline(int sock, char* sender){
+void send_online(int sock, char* username){
+	char* ip;
+	uint16_t port;
 	char buffer[BUFFER_SIZE], tmp[BUFFER_SIZE];
-	uint16_t lenght, ltos;
+	struct sockaddr_in sv_addr;
+	int sock_msg;
 
-	send_username(sock, sender);
-	
+	// Ricezione indirizzo ip dal server
+	ip = receive_str(sock);
+
+	// Ricezione porta di ascolto del client destinatario dal server
+	port = receive_uint(sock);
+
+	// Testo del messaggio
 	memset(buffer,0,sizeof(buffer));
 	while(fgets(tmp, BUFFER_SIZE, stdin)){
-		if(*tmp=='.')
+		if(*tmp=='.' && *(tmp+1)=='\n')
 			break;
 		strcat(buffer, tmp);
 		memset(tmp, 0, sizeof(tmp));
 	}
 
-	sprintf(buffer, "%s", buffer); // aggiunta terminatore di stringa
-	printf("\n%s", buffer);
-	ltos = strlen(buffer)+1;
-	lenght=htons(ltos);
+	sock_msg=socket(AF_INET, SOCK_DGRAM, 0);
 
-	if(send(sock, &lenght, sizeof(uint16_t), 0) <0)
-		perror("Errore nell'inviare la lunghezza");
-	if(send(sock, buffer, ltos, 0) <0)
-		perror("Errore nell'invio del messaggio");
+	memset(&sv_addr, 0, sizeof(sv_addr));
+	sv_addr.sin_family=AF_INET;
+	sv_addr.sin_port=htons(port);
+	inet_pton(AF_INET, ip, &sv_addr.sin_addr);
+
+	if(connect(sock_msg, (struct sockaddr*)&sv_addr, sizeof(sv_addr))<0)
+		perror("Errore \"connessione\" server UDP");
+	
+	send_username(sock_msg, username);
+
+	// Invio testo del messaggio
+	send_str(sock_msg, buffer);
+
+	close(sock_msg);
+}
+
+void receive_offmessage(int sock){
+	char msg[BUFFER_SIZE];
+	char* username;
+	char* buffer;
+
+	while(receive_uint(sock)){
+		username=receive_username(sock);
+
+		memset(msg, 0, sizeof(msg));
+		sprintf(msg, "%s (msg offline)>", username);
+		printf("%s\n", msg);
+
+		while(receive_uint(sock)){
+			memset(msg,0,sizeof(msg));
+			buffer=receive_str(sock);
+			printf("%s", buffer);
+			free(buffer);
+		}
+		free(username);
+	}
+}
+
+void send_offline(int sock, char* sender){
+	char buffer[BUFFER_SIZE], tmp[BUFFER_SIZE];
+
+	send_username(sock, sender);
+	
+	memset(buffer,0,sizeof(buffer));
+	while(fgets(tmp, BUFFER_SIZE, stdin)){
+		if(*tmp=='.' && *(tmp+1)=='\n')
+			break;
+		strcat(buffer, tmp);
+		memset(tmp, 0, sizeof(tmp));
+	}
+
+	// Invio testo del messaggio
+	send_str(sock, buffer);
 }
 	
 
 void receive_udp(char* ip, char* port){
 	struct sockaddr_in my_addr, cl_addr;
 	int sock;
-	uint16_t lenght;
 	char *buffer, *username=NULL;
-	unsigned int len = sizeof(cl_addr);
+	//unsigned int len = sizeof(cl_addr);
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	memset(&my_addr, 0, sizeof(my_addr));
@@ -176,48 +236,14 @@ void receive_udp(char* ip, char* port){
 	if(bind(sock, (struct sockaddr*)&my_addr, sizeof(my_addr)) <0)
 		perror("Errore nel bindare il socket UDP");
 
-	while(1){
-
-		username=receive_username(sock);
-
-		if(recv(sock, &lenght, sizeof(uint16_t), 0) <0){
-			perror("Errore nel ricevere la lunghezza del messaggio UDP");
-		}
-		buffer = malloc(ntohs(lenght));
-		if(recv(sock, buffer,  ntohs(lenght), 0) <0){
-			perror("Errore nella ricezione del messaggio instantaneo");
-		}
-		/*
-		if(recvfrom(sock, &lenght, sizeof(uint16_t), 0, (struct sockaddr*)&cl_addr, &len)<0)
-			perror("Errore nel ricevere la lunghezza del messaggio");
-		buffer=malloc(ntohs(lenght));
-		if(recvfrom(sock, buffer, ntohs(lenght), 0, (struct sockaddr*)&cl_addr, &len)<0)
-			perror("Errore nel ricevere il messaggio instantaneo");
-			*/
+	while(username=receive_username(sock)){
+		buffer = receive_str(sock);
 		printf("%s (msg instantaneo)>\n%s", username, buffer);
 		free(username);
 		free(buffer);
 	}
 }
-/*
-void send_username(int sock, char* username){
-	
-	uint16_t lenght;
-	uint16_t lentc=strlen(username)+1;
 
-	lenght = (username)?htons(lentc):htons(0);
-	if(send(sock, (void*)&lenght, sizeof(uint16_t), 0) < 0){
-		perror("Errore nell'invio della lunghezza dell'username");
-		exit(1);
-	}
-	if(ntohs(lenght)){
-		if(send(sock,(void*)username, lentc, 0) < 0){
-			perror("Error nell'invio dell'username");
-			exit(1);
-		}
-	}
-}
-*/
 void put_command(int sock, char* buffer){
 
 	
@@ -235,7 +261,6 @@ void put_command(int sock, char* buffer){
 }
 
 void who_command(int sock, char* mio_username){
-	uint16_t lenght;
 	char* username;
 	unsigned int i_status;
 	
@@ -246,28 +271,16 @@ void who_command(int sock, char* mio_username){
 	strcpy(status[1], "Online");
 
 	printf("Client registrati:\n");
-	while(1){
-		if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
-			perror("Errore nel ricevere la lunghezza dell'username");
-			exit(1);
-		}
-		if(!ntohs(lenght))
-			break;
-		username=malloc(ntohs(lenght));
-		memset(username, 0, ntohs(lenght));
-		if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
-			perror("Errore nel ricevere l'username");
-			exit(1);
-		}
+	while(receive_uint(sock)){
+		username = receive_username(sock);
 		memset(&i_status, 0, sizeof(unsigned int));
-		if(recv(sock, (void*)&i_status, sizeof(unsigned int),0) <0)
-			perror("Errore nel ricevere lo status dell'utente");
+		i_status=receive_uint(sock);
 
 		if(mio_username && !strcmp(mio_username, username)){
 			free(username);
 			continue;
 		}
-		printf("\t%s (%s)\t\n", username, status[ntohs(i_status)]);
+		printf("\t%s (%s)\t\n", username, status[i_status]);
 		free(username);
 	}
 	free(status[0]);
@@ -277,7 +290,7 @@ void who_command(int sock, char* mio_username){
 
 int register_user(char* arg_command, int sock, char* ip, char* port){
 	uint16_t ptnet;
-	int result;
+	unsigned int result;
 
 	send_username(sock, arg_command);
 
@@ -292,12 +305,8 @@ int register_user(char* arg_command, int sock, char* ip, char* port){
 		perror("Errore nell'invio della porta");
 		exit(1);
 	}
-
-	if(recv(sock, (void*)&result, sizeof(int), 0) <0){
-		perror("Errore nella ricezione dell'esito della registrazione");
-		exit(1);
-	}
-	result=ntohs(result);
+	
+	result = receive_uint(sock);
 	switch(result){
 		case 0:
 			printf("Registrazione avvenuta con successo\n");
@@ -332,8 +341,6 @@ void split_command(const char* command, char** arg_command){
 	//Copy argument of command
 	*arg_command=malloc(strlen(tmp+1)+1);
 	sprintf(*arg_command, "%s", tmp+1);
-	//memcpy((void*)*arg_command, (void*)(tmp+1), strlen(tmp+1)+1);
-	//memset(tmp+1, 0, strlen(tmp+1));
 }
 
 void stampacomandi(){
