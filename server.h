@@ -23,9 +23,14 @@ struct info_sock{
 
 struct msg_offline{
 	char* username;
-	char** msg;
+	struct msg* msg;
 	int count;
 	struct msg_offline* next_msg;
+};
+
+struct msg{
+	char* text;
+	struct msg* next;
 };
 
 void logging(char*);
@@ -34,5 +39,5 @@ void get_command(int, char*);
 void who_command(int, struct users*);
 void quit_command(int, struct users*);
 void deregister_command(int, struct users**);
-
+void send_offmessage(int, char*, struct users*);
 

@@ -15,4 +15,4 @@ void split_command(const char*, char**);
 int register_user(char*, int, char*, char*);
 void who_command(int, char*);
 void put_command(int, char*);
-
+void send_online(int, char*);
