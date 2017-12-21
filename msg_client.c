@@ -15,7 +15,6 @@ int main(int argc, char** argv){
 	char prompt[50]= "> ";
 	char* username=NULL;
 	pid_t pid;
-	char** tofork=&username;
 
 	if(argc!=5){
 		printf("Hai dimenticato qualche argomento, la sintassi è:\n");
@@ -49,7 +48,7 @@ int main(int argc, char** argv){
 	pid = fork();
 	if(!pid){
 		close(sock);
-		receive_udp(argv[1], argv[2], tofork);
+		receive_udp(argv[1], argv[2], &username);
 	}
 
 	while(printf(prompt) && fgets(cmd, CMD_SIZE, stdin)){
@@ -62,7 +61,7 @@ int main(int argc, char** argv){
 			/*
 			 * Quit command
 			 */
-			send_username(sock, username);
+			send_username(sock, username); 
 			if(username)
 				free(username);
 			close(sock);
