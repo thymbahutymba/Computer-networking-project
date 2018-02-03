@@ -1,5 +1,6 @@
 CC=gcc
 CFLAGS=-Wall
+TERM=konsole
 
 all: msg_client.o msg_server.o condivisi.o
 	$(CC) $(CFLAGS) -o msg_client msg_client.o condivisi.o
@@ -16,3 +17,7 @@ condivisi.o: condivisi.c condivisi.h
 
 clean: 
 	rm *.o msg_server msg_client
+
+test:
+	$(TERM) --fullscreen -e ./test.sh
+	./stopall.sh
