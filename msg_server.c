@@ -15,19 +15,15 @@ int main(int argc, char** argv){
 	char* new_username=NULL;
 
 	listener = socket(AF_INET, SOCK_STREAM, 0);
-	close(listener);
-	close(listener);
-	close(listener);
-	listener = socket(AF_INET, SOCK_STREAM, 0);
 
 	FD_ZERO(&master);
 	FD_ZERO(&master_cpy);
 	memset(&my_addr, 0, sizeof(my_addr));
 
 	my_addr.sin_family=AF_INET;
-	my_addr.sin_port = htons(*argv[1]);
+	my_addr.sin_port = htons(atoi(argv[1]));
 	my_addr.sin_addr.s_addr = INADDR_ANY;
-	//inet_pton(AF_INET, argv[2], &my_addr.sin_addr);
+	
 	if(bind(listener, (struct sockaddr*)&my_addr, sizeof(my_addr))<0){
 		perror("Bind error");
 		exit(1);

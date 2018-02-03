@@ -27,7 +27,7 @@ int main(int argc, char** argv){
 
 	memset(&sv_addr, 0, sizeof(sv_addr));
 	sv_addr.sin_family=AF_INET;
-	sv_addr.sin_port=htons(*argv[4]);
+	sv_addr.sin_port=htons(atoi(argv[4]));
 	//sv_addr.sin_addr.s_addr=INADDR_ANY;
 	inet_pton(AF_INET, argv[3], &sv_addr.sin_addr);
 	
@@ -229,8 +229,9 @@ void receive_udp(char* ip, char* port, char** my_name){
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	memset(&my_addr, 0, sizeof(my_addr));
+
 	my_addr.sin_family=AF_INET;
-	my_addr.sin_port=htons(*port);
+	my_addr.sin_port=htons(atoi(port));
 	inet_pton(AF_INET, ip, &my_addr.sin_addr);
 	if(bind(sock, (struct sockaddr*)&my_addr, sizeof(my_addr)) <0)
 		perror("Errore nel bindare il socket UDP");
