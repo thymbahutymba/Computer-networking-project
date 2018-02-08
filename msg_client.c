@@ -263,11 +263,11 @@ void* receive_udp(void* args){
 
 	while(t_args->username!=NULL && (username=receive_username(sock))){
 		buffer = receive_str(sock);
-		printf("\n%s (msg instantaneo)>\n%s\n", username, buffer);
+		printf("\n%s (msg instantaneo)>\n%s", username, buffer);
 		free(username);
 		free(buffer);
+		printf("%s> ", t_args->username);
 		fflush(stdout);
-		printf("%s> \n", t_args->username);
 	}
 	return NULL;
 }
