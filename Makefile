@@ -1,9 +1,10 @@
 CC=gcc
 CFLAGS=-Wall
+LDFLAGS=-lpthread
 TERM=konsole
 
 all: msg_client.o msg_server.o condivisi.o
-	$(CC) $(CFLAGS) -o msg_client msg_client.o condivisi.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o msg_client msg_client.o condivisi.o
 	$(CC) $(CFLAGS) -o msg_server msg_server.o condivisi.o
 
 msg_client.o: msg_client.c client.h
