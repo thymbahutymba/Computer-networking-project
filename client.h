@@ -1,10 +1,7 @@
-//#include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-//#include <arpa/inet.h>
-//#include <string.h>
 #include <unistd.h>
-//#include <stdlib.h>
+#include <pthread.h>
 
 #define CMD_SIZE 50
 #define BUFFER 1024

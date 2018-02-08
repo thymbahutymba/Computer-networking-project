@@ -2,25 +2,32 @@
 #include "client.h"
 
 #define BUFFER_SIZE 1024
-void receive_udp(char*, char*, char**);
+void* receive_udp(void*);
 void send_offline(int, char*);
 void receive_offmessage(int);
 
+struct thread_args{
+	char* ip;
+	char* port;
+	char* username;
+	int* UDP_sock;
+};
+
 int main(int argc, char** argv){
 	int sock;
-	//unsigned int status;
 	struct sockaddr_in sv_addr;
 	char* cmd=malloc(CMD_SIZE);
 	char* arg_command=NULL;
 	char prompt[50]= "> ";
 	char* username=NULL;
-	pid_t pid;
+	pthread_t thread;
+	struct thread_args t_args;
 
 	if(argc!=5){
 		printf("Hai dimenticato qualche argomento, la sintassi è:\n");
 		printf("./msg_client <ip del client> <porta locale> <ip server> <porta server>\n");
 		return 0;
-	}	
+	}
 
 	//socket connessione server
 	sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -28,7 +35,6 @@ int main(int argc, char** argv){
 	memset(&sv_addr, 0, sizeof(sv_addr));
 	sv_addr.sin_family=AF_INET;
 	sv_addr.sin_port=htons(atoi(argv[4]));
-	//sv_addr.sin_addr.s_addr=INADDR_ANY;
 	inet_pton(AF_INET, argv[3], &sv_addr.sin_addr);
 	
 	/*
@@ -41,21 +47,45 @@ int main(int argc, char** argv){
 
 	welcome(argv[3], argv[4], argv[2]);
 
-	/*
-	 * Fork process to read from UDP sock
-	 */
-
-	pid = fork();
-	if(!pid){
-		close(sock);
-		receive_udp(argv[1], argv[2], &username);
-	}
-
 	while(printf(prompt) && fgets(cmd, CMD_SIZE, stdin)){
 
 		split_command(cmd, &arg_command);
-		put_command(sock, cmd);
 
+		if(!strcmp("!register\0", cmd)){
+			
+			/*
+			 * Register command
+			 */
+			if(!arg_command){
+				printf("Hai dimenticato a specificare l'username oppure contiene degli spazi.\n");
+			}else{
+				put_command(sock, cmd);
+				switch(register_user(arg_command, sock, argv[1], argv[2])){
+					case 1:
+						break;
+					case 2:
+						receive_offmessage(sock);
+						break;
+				}
+
+				memset(prompt,0,strlen(prompt));
+				sprintf(prompt, "%s> ", arg_command);
+				username = malloc(strlen(arg_command));
+				sprintf(username, "%s", arg_command);
+
+				t_args.ip=malloc(strlen(argv[1]));
+				t_args.port=malloc(strlen(argv[2]));
+				t_args.username=malloc(strlen(username));
+
+				sprintf(t_args.ip, "%s", argv[1]);
+				sprintf(t_args.port, "%s", argv[2]);
+				sprintf(t_args.username, "%s", username);
+				pthread_create(&thread, NULL, receive_udp, (void*)&t_args);
+
+			}
+		}else
+			put_command(sock, cmd);
+		
 		if(!strcmp("!quit\0", cmd)){
 			
 			/*
@@ -80,28 +110,8 @@ int main(int argc, char** argv){
 			 */
 
 			who_command(sock, username);
-		}else if(!strcmp("!register\0", cmd)){
-			
-			/*
-			 * Register command
-			 */
-			if(!arg_command){
-				printf("Hai dimenticato a specificare l'username oppure contiene degli spazi.\n");
-			}else{
-				switch(register_user(arg_command, sock, argv[1], argv[2])){
-					case 1:
-						break;
-					case 2:
-						receive_offmessage(sock);
-						break;
-				}
-				memset(prompt,0,strlen(prompt));
-				sprintf(prompt, "%s> ", arg_command);
-				username = malloc(strlen(arg_command));
-				sprintf(username, "%s", arg_command);
-			}
 		}else if(!strcmp("!deregister\0", cmd)){
-			
+
 			/*
 			 * Deregister command
 			 */
@@ -109,6 +119,15 @@ int main(int argc, char** argv){
 			free(username);
 			username=NULL;
 			memset(prompt,0,strlen(prompt));
+
+			free(t_args.username);
+			free(t_args.ip);
+			free(t_args.port);
+			
+			pthread_cancel(thread);
+			close(*t_args.UDP_sock);
+			free(t_args.UDP_sock);
+
 			printf("Deregistrazione avvenuta con successo\n");
 			sprintf(prompt,"> ");
 		}else if(!strcmp("!send\0", cmd)){
@@ -137,6 +156,7 @@ int main(int argc, char** argv){
 		}
 
 		memset(cmd, 0, CMD_SIZE);
+		//memset(arg_command, 0, strlen(arg_command));
 		free(arg_command);
 		arg_command=NULL;
 	}
@@ -144,7 +164,7 @@ int main(int argc, char** argv){
 
 void send_online(int sock, char* username){
 	char* ip;
-	uint16_t port;
+	char* port;
 	char buffer[BUFFER_SIZE], tmp[BUFFER_SIZE];
 	struct sockaddr_in sv_addr;
 	int sock_msg;
@@ -153,7 +173,7 @@ void send_online(int sock, char* username){
 	ip = receive_str(sock);
 
 	// Ricezione porta di ascolto del client destinatario dal server
-	port = receive_uint(sock);
+	port = receive_str(sock);
 
 	// Testo del messaggio
 	memset(buffer,0,sizeof(buffer));
@@ -168,7 +188,7 @@ void send_online(int sock, char* username){
 
 	memset(&sv_addr, 0, sizeof(sv_addr));
 	sv_addr.sin_family=AF_INET;
-	sv_addr.sin_port=htons(port);
+	sv_addr.sin_port=htons(atoi(port));
 	inet_pton(AF_INET, ip, &sv_addr.sin_addr);
 
 	if(connect(sock_msg, (struct sockaddr*)&sv_addr, sizeof(sv_addr))<0)
@@ -220,33 +240,39 @@ void send_offline(int sock, char* sender){
 	// Invio testo del messaggio
 	send_str(sock, buffer);
 }
-	
 
-void receive_udp(char* ip, char* port, char** my_name){
+void* receive_udp(void* args){
 	struct sockaddr_in my_addr;
 	int sock;
 	char *buffer, *username=NULL;
+	struct thread_args* t_args = (struct thread_args*)args;
+	
+	char* user=malloc(strlen(t_args->username)+1);
+	sprintf(user, "%s", t_args->username);
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	t_args->UDP_sock=malloc(sizeof(int));
+	*(t_args->UDP_sock)=sock;
 	memset(&my_addr, 0, sizeof(my_addr));
 
 	my_addr.sin_family=AF_INET;
-	my_addr.sin_port=htons(atoi(port));
-	inet_pton(AF_INET, ip, &my_addr.sin_addr);
+	my_addr.sin_port=htons(atoi(t_args->port));
+	inet_pton(AF_INET, t_args->ip, &my_addr.sin_addr);
 	if(bind(sock, (struct sockaddr*)&my_addr, sizeof(my_addr)) <0)
 		perror("Errore nel bindare il socket UDP");
 
-	while((username=receive_username(sock))){
+	while(t_args->username!=NULL && (username=receive_username(sock))){
 		buffer = receive_str(sock);
-		printf("\n%s (msg instantaneo)>\n%s", username, buffer);
+		printf("\n%s (msg instantaneo)>\n%s\n", username, buffer);
 		free(username);
 		free(buffer);
-		printf("%s> \n", *my_name);
+		fflush(stdout);
+		printf("%s> \n", t_args->username);
 	}
+	return NULL;
 }
 
 void put_command(int sock, char* buffer){
-
 	
 	uint16_t lenght=htons(strlen(buffer)+1);
 
@@ -290,22 +316,15 @@ void who_command(int sock, char* mio_username){
 }
 
 int register_user(char* arg_command, int sock, char* ip, char* port){
-	uint16_t ptnet;
+	//uint16_t ptnet;
 	unsigned int result;
 
 	send_username(sock, arg_command);
 
 	// Send ip and port
-	if(send(sock,(void*)ip, 16, 0) < 0){
-		perror("Errore nell'invio dell'IP");
-		exit(1);
-	}
 	
-	ptnet = htons(*port);
-	if(send(sock, (void*)&ptnet, sizeof(uint16_t),0) <0){
-		perror("Errore nell'invio della porta");
-		exit(1);
-	}
+	send_str(sock, ip);
+	send_str(sock, port);
 	
 	result = receive_uint(sock);
 	switch(result){
@@ -335,7 +354,7 @@ void split_command(const char* command, char** arg_command){
 	}
 
 	//L'username non puo` contenere spazi
-	if(!strlen(tmp+1) || strchr(tmp+1,' ')){
+	if(strchr(tmp+1,' ')){
 		return;
 	}
 	

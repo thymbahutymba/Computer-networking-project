@@ -1,16 +1,13 @@
-//#include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-//#include <arpa/inet.h>
-//#include <string.h>
 #include <unistd.h>
-//#include <stdlib.h>
 #include <time.h>
 
 #define BUFFER_SIZE 1024
 
 struct users{
 	char* username;
+	int TCP_sock;
 	struct info_sock* my_info;
 	struct msg_offline* first_msg;
 	struct users* next_user;
@@ -18,7 +15,7 @@ struct users{
 
 struct info_sock{
 	char* ip;
-	uint16_t port;
+	char* port;
 };
 
 struct msg_offline{
@@ -35,9 +32,9 @@ struct msg{
 
 void logging(char*);
 int register_username(int, struct users**, char**);
-void get_command(int, char*);
+void get_command(int, char*, struct users*, fd_set*);
 void who_command(int, struct users*);
 void quit_command(int, struct users*);
 void deregister_command(int, struct users**);
 void send_offmessage(int, char*, struct users*);
-
+void send_command(int, struct users*);

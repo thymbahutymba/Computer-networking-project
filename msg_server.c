@@ -1,8 +1,6 @@
 #include "condivisi.h"
 #include "server.h"
 
-void send_command(int, struct users*);
-
 int main(int argc, char** argv){
 	int listener, new_sock;
 	struct sockaddr_in my_addr;
@@ -59,31 +57,40 @@ int main(int argc, char** argv){
 
 				}else{
 					memset(buffer, 0, BUFFER_SIZE);
-					get_command(i, buffer);
+					get_command(i, buffer, utenti, &master);
 
 					if(!strcmp(buffer,"!register\0")){
+						/*
+						 * Register Command
+						 */
 						result = register_username(i, &utenti, &new_username);
 						send_uint(i, result);
-						/*s = htons(result);
-						if(send(i, (void*)&s, sizeof(int), 0)<0){
-							perror("Errore in risposta allla richiesta di registrazione");
-							exit(1);
-						}*/
+
 						if(result==2){
-							//TODO Invio messaggi se riconnession
 							send_offmessage(i, new_username, utenti);
 						}
 
 					}else if(!strcmp(buffer, "!who\0")){
+						/* 
+						 * Who command
+						 */
 						who_command(i, utenti);
 					}else if(!strcmp(buffer, "!quit\0")){
-						
+						/*
+						 * Quit Command
+						 */
 						quit_command(i, utenti);
 						close(i);
 						FD_CLR(i, &master);	
 					}else if(!strcmp(buffer, "!deregister\0")){
+						/*
+						 * Deregister command
+						 */
 						deregister_command(i, &utenti);
 					}else if(!strcmp(buffer, "!send\0")){
+						/*
+						 * Send Command
+						 */
 						send_command(i, utenti);
 					}
 				}
@@ -117,6 +124,9 @@ void send_offmessage(int sock, char* username, struct users* utenti){
 			// Cancello il messaggio
 			deletemsg=message;
 			message=message->next;
+
+			// Free text and struct
+			free(deletemsg->text);
 			free(deletemsg);
 		}
 		// Segnale di fine messaggi per utente
@@ -125,6 +135,8 @@ void send_offmessage(int sock, char* username, struct users* utenti){
 		// Cancello utente dalla lista
 		deleteuser=fromuser;
 		fromuser=fromuser->next_msg;
+
+		free(deleteuser->username);
 		free(deleteuser);
 	}
 	
@@ -234,7 +246,7 @@ void send_command(int sock, struct users* utenti){
 		//Invio dell'indirizzo ip
 		send_str(sock, to_send->my_info->ip);
 		//Invio della porta
-		send_uint(sock,to_send->my_info->port);
+		send_str(sock,to_send->my_info->port);
 		
 		sprintf(msg, "Invio IP e Porta di %s per lo scambio di messaggi instantanei", username);
 		logging(msg);
@@ -259,6 +271,8 @@ void deregister_command(int sock, struct users** utenti){
 
 	free(tmp->username);
 	free(tmp->my_info->ip);
+	free(tmp->my_info->port);
+	free(tmp->my_info);
 	sprintf(msg, "Utente %s deregistrato", username);
 	free(username);
 
@@ -275,26 +289,55 @@ void quit_command(int sock, struct users* utenti){
 			if(!strcmp(username,utenti->username))
 				break;
 		}
+		free(utenti->my_info->port);
+		free(utenti->my_info->ip);
 		free(utenti->my_info);
 		utenti->my_info=NULL;
 		utenti->first_msg=NULL; 
 		sprintf(msg, "Disconnessione di: %s", username);
 		logging(msg);
+		free(username);
 		return;
 	}
 	logging("Disconnessione di un client non registrato");
 }
 
 
-void get_command(int sock, char* buffer){
+void get_command(int sock, char* buffer, struct users *utenti, fd_set* master){
 	uint16_t lenght;
+	int ret, registrato=0;
+	char msg[50];
 	memset(&lenght, 0, sizeof(uint16_t));
 
 	//Get lenght of command
-	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0)<0){
+	ret = recv(sock, (void*)&lenght, sizeof(uint16_t), 0);
+	
+	if(ret<0){
 		perror("Errore nel ricevere la lunghezza del comando");
 		exit(1);
+	}else if(!ret){
+		for(;utenti; utenti=utenti->next_user)
+			if(utenti->TCP_sock==sock){
+				registrato = 1;
+				break;
+			}
+		if(registrato){
+			free(utenti->my_info->ip);
+			free(utenti->my_info->port);
+			free(utenti->my_info);
+			utenti->my_info=NULL;
+			utenti->first_msg=NULL;
+			sprintf(msg, "Possibile chiusura inaspettata per %s", utenti->username);
+			logging(msg);
+		}else{
+			sprintf(msg, "Chiusura inaspettata di un client non registrato");
+			logging(msg);
+		}
+		FD_CLR(sock, master);
+		close(sock);
+		return;
 	}
+
 
 	//Get command
 	if(recv(sock, (void*)buffer, ntohs(lenght),0) < 0){
@@ -306,7 +349,7 @@ void get_command(int sock, char* buffer){
 
 void who_command(int sock, struct users* utenti){
 	unsigned int status;
-
+	logging("Richiesta lista utenti registrati");
 	for(;utenti;utenti=utenti->next_user){
 		// Segnale per invio username
 		send_uint(sock, 1);
@@ -321,7 +364,7 @@ void who_command(int sock, struct users* utenti){
 
 int register_username(int sock, struct users** utenti, char** new_username){
 	char* username;
-	uint16_t port;
+	char* port;
 	char* ip;
 	char msg[50];
 	struct users* tmp=*utenti;
@@ -332,16 +375,8 @@ int register_username(int sock, struct users** utenti, char** new_username){
 	username=receive_username(sock);
 
 	// Ricezione indirizzo locale client
-	ip = malloc(16);
-	if(recv(sock, (void*)ip, 16, 0) <0){
-		perror("Errore nel ricevere l'IP");
-		exit(1);
-	}
-
-	if(recv(sock, (void*)&port, sizeof(uint16_t), 0) <0){
-		perror("Errore nel ricevere la porta");
-	}
-	port = ntohs(port);
+	ip = receive_str(sock);
+	port = receive_str(sock);
 	
 	for(; tmp; prec=tmp, tmp=tmp->next_user){
 
@@ -356,6 +391,8 @@ int register_username(int sock, struct users** utenti, char** new_username){
 
 			sprintf(msg, "Riconnessione di %s", tmp->username);
 			logging(msg);
+
+			tmp->TCP_sock = sock;
 
 			*new_username=malloc(strlen(tmp->username));
 			memset(*new_username,0, strlen(tmp->username)+1);
@@ -385,6 +422,7 @@ int register_username(int sock, struct users** utenti, char** new_username){
 	tmp->username=username;
 	tmp->next_user=NULL;
 	tmp->first_msg=NULL;
+	tmp->TCP_sock = sock;
 	
 	tmp->my_info=malloc(sizeof(struct info_sock));
 	tmp->my_info->ip = ip;
