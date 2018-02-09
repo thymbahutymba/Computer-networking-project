@@ -47,7 +47,7 @@ int main(int argc, char** argv){
 			if(FD_ISSET(i,&master_cpy)){
 				if(i==listener){
 
-					//New connection request
+					// Nuova richiesta di connessione
 					addrlen = (sizeof(cl_addr));
 					new_sock = accept(listener, (struct sockaddr*)&cl_addr, &addrlen);
 					FD_SET(new_sock, &master);
@@ -202,6 +202,7 @@ void send_command(int sock, struct users* utenti){
 			/*
 			 * Sender già presente
 			 */
+
 			// Ricerca ultimo messaggio
 			tmp_msg=append->msg;
 			for(new_msg=tmp_msg; tmp_msg; new_msg=tmp_msg, tmp_msg=tmp_msg->next);
@@ -260,6 +261,7 @@ void deregister_command(int sock, struct users** utenti){
 	struct users* prec=*utenti;
 	char msg[BUFFER_SIZE];
 
+	// Ricerca utente
 	for(;tmp;prec=tmp, tmp=tmp->next_user)
 		if(!strcmp(username,tmp->username))
 			break;
@@ -269,6 +271,7 @@ void deregister_command(int sock, struct users** utenti){
 	else
 		prec->next_user=tmp->next_user;
 
+	// Eliminazione utente
 	free(tmp->username);
 	free(tmp->my_info->ip);
 	free(tmp->my_info->port);
@@ -284,6 +287,11 @@ void quit_command(int sock, struct users* utenti){
 	char msg[BUFFER_SIZE];
 	
 	username=receive_username(sock);
+
+	/*
+	 * Se utente registrato
+	 * Aggiornamento struttura dati relativa all'utente
+	 */
 	if(username){
 		for(;utenti;utenti=utenti->next_user){
 			if(!strcmp(username,utenti->username))
@@ -309,13 +317,17 @@ void get_command(int sock, char* buffer, struct users *utenti, fd_set* master){
 	char msg[50];
 	memset(&lenght, 0, sizeof(uint16_t));
 
-	//Get lenght of command
 	ret = recv(sock, (void*)&lenght, sizeof(uint16_t), 0);
 	
 	if(ret<0){
 		perror("Errore nel ricevere la lunghezza del comando");
 		exit(1);
 	}else if(!ret){
+		/*
+		 * Comportamento anomalo durante l'attesa di un comando
+		 * Possibile chiusura inaspettata del client
+		 * Ricerca e rimozione (disconnessione) dell'utente
+		 */
 		for(;utenti; utenti=utenti->next_user)
 			if(utenti->TCP_sock==sock){
 				registrato = 1;
@@ -339,7 +351,7 @@ void get_command(int sock, char* buffer, struct users *utenti, fd_set* master){
 	}
 
 
-	//Get command
+	// Ricezione del comando
 	if(recv(sock, (void*)buffer, ntohs(lenght),0) < 0){
 		perror("Errore nel ricevere il comando");
 		exit(1);
@@ -359,6 +371,7 @@ void who_command(int sock, struct users* utenti){
 		status=(utenti->my_info==NULL)?0:1;
 		send_uint(sock, status);
 	}
+	// Segnale di notifica fine utenti
 	send_uint(sock, 0);
 }
 

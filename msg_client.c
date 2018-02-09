@@ -51,42 +51,75 @@ int main(int argc, char** argv){
 
 		split_command(cmd, &arg_command);
 
+		/*
+		 * Controllo situazioni di errore/anomale
+		 */
+
+		if(!strcmp("!register\0", cmd) && !arg_command){
+			printf("Hai dimenticato a specificare l'username oppure contiene degli spazi\n");
+			continue;
+		}else if(!strcmp("!send\0", cmd) && !username){
+			printf("Non sei ancora registrato, registrati tramite !register <username>\n");
+			continue;
+		}else if(!strcmp("!register\0", cmd) && username!=NULL){
+			printf("Sei già registrato\n");
+			continue;
+		}
+
+
+		put_command(sock, cmd);
+
 		if(!strcmp("!register\0", cmd)){
 			
 			/*
 			 * Register command
 			 */
-			if(!arg_command){
-				printf("Hai dimenticato a specificare l'username oppure contiene degli spazi.\n");
-			}else{
-				put_command(sock, cmd);
-				switch(register_user(arg_command, sock, argv[1], argv[2])){
-					case 1:
-						break;
-					case 2:
-						receive_offmessage(sock);
-						break;
-				}
+			register_user(arg_command, sock, argv[1], argv[2]);
+			/*
+				case 1:
+					break;
+				case 2:
+					receive_offmessage(sock);
+					break;
+			}*/
 
-				memset(prompt,0,strlen(prompt));
-				sprintf(prompt, "%s> ", arg_command);
-				username = malloc(strlen(arg_command));
-				sprintf(username, "%s", arg_command);
+			memset(prompt,0,strlen(prompt));
+			sprintf(prompt, "%s> ", arg_command);
+			username = malloc(strlen(arg_command));
+			sprintf(username, "%s", arg_command);
 
-				t_args.ip=malloc(strlen(argv[1]));
-				t_args.port=malloc(strlen(argv[2]));
-				t_args.username=malloc(strlen(username));
+			t_args.ip=malloc(strlen(argv[1]));
+			t_args.port=malloc(strlen(argv[2]));
+			t_args.username=malloc(strlen(username));
 
-				sprintf(t_args.ip, "%s", argv[1]);
-				sprintf(t_args.port, "%s", argv[2]);
-				sprintf(t_args.username, "%s", username);
-				pthread_create(&thread, NULL, receive_udp, (void*)&t_args);
+			sprintf(t_args.ip, "%s", argv[1]);
+			sprintf(t_args.port, "%s", argv[2]);
+			sprintf(t_args.username, "%s", username);
+			pthread_create(&thread, NULL, receive_udp, (void*)&t_args);
 
+		}else if(!strcmp("!send\0", cmd)){
+			
+			/*
+			 * Send command
+			 */
+			printf("\n");
+
+			// Invio destinatario del messaggio
+			send_username(sock, arg_command);
+			switch (receive_uint(sock)){
+				case 0:
+					printf("Impossibile connettersi a %s: utente inesistente\n", arg_command);
+					break;
+				case 1:
+					send_offline(sock, username);
+					printf("Messaggio inviato con successo\n");
+					break;
+				case 2:
+					send_online(sock, username);
+					printf("Messaggio instantaneo inviato con successo\n");
+					break;
 			}
-		}else
-			put_command(sock, cmd);
-		
-		if(!strcmp("!quit\0", cmd)){
+		}else if(!strcmp("!quit\0", cmd)){
 			
 			/*
 			 * Quit command
@@ -108,7 +141,6 @@ int main(int argc, char** argv){
 			/*
 			 * Who command
 			 */
-
 			who_command(sock, username);
 		}else if(!strcmp("!deregister\0", cmd)){
 
@@ -130,33 +162,9 @@ int main(int argc, char** argv){
 
 			printf("Deregistrazione avvenuta con successo\n");
 			sprintf(prompt,"> ");
-		}else if(!strcmp("!send\0", cmd)){
-			
-			/*
-			 * Send command
-			 */
-			printf("\n");
-			if(!username)
-				printf("Non sei ancora registrato\n");
-
-			// Invio destinatario del messaggio
-			send_username(sock, arg_command);
-			switch (receive_uint(sock)){
-				case 0:
-					printf("Impossibile connettersi a %s: utente inesistente\n", arg_command);
-					break;
-				case 1:
-					send_offline(sock, username);
-					printf("Messaggio inviato con successo\n");
-					break;
-				case 2:
-					send_online(sock, username);
-					break;
-			}
 		}
 
 		memset(cmd, 0, CMD_SIZE);
-		//memset(arg_command, 0, strlen(arg_command));
 		free(arg_command);
 		arg_command=NULL;
 	}
@@ -315,8 +323,7 @@ void who_command(int sock, char* mio_username){
 	free(status);
 }
 
-int register_user(char* arg_command, int sock, char* ip, char* port){
-	//uint16_t ptnet;
+void register_user(char* arg_command, int sock, char* ip, char* port){
 	unsigned int result;
 
 	send_username(sock, arg_command);
@@ -336,8 +343,8 @@ int register_user(char* arg_command, int sock, char* ip, char* port){
 			break;
 		case 2:
 			printf("Riconnessione avvenuta con successo\n");
+			receive_offmessage(sock);
 	}
-	return result;
 }
 
 void split_command(const char* command, char** arg_command){

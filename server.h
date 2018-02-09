@@ -1,3 +1,6 @@
+#ifndef SERVER_H
+#define SERVER_H
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -38,3 +41,5 @@ void quit_command(int, struct users*);
 void deregister_command(int, struct users**);
 void send_offmessage(int, char*, struct users*);
 void send_command(int, struct users*);
+
+#endif

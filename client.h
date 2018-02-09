@@ -1,3 +1,6 @@
+#ifndef CLIENT_H
+#define CLIENT_H
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -9,7 +12,9 @@
 void welcome(const char*,const char*,const char*);
 void stampacomandi();
 void split_command(const char*, char**);
-int register_user(char*, int, char*, char*);
+void register_user(char*, int, char*, char*);
 void who_command(int, char*);
 void put_command(int, char*);
 void send_online(int, char*);
+
+#endif

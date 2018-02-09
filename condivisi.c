@@ -6,50 +6,45 @@ void send_username(int sock, char* username){
 	uint16_t lentc=(username)?strlen(username)+1:0;
 
 	lenght = htons(lentc);
-	if(send(sock, (void*)&lenght, sizeof(uint16_t), 0) < 0){
+	while(send(sock, (void*)&lenght, sizeof(uint16_t), 0) < 0)
 		perror("Errore nell'invio della lunghezza dell'username");
-		exit(1);
-	}
-	if(lentc){
-		if(send(sock,(void*)username, lentc, 0) < 0){
-			perror("Error nell'invio dell'username");
-			exit(1);
-		}
-	}
+	
+	if(lentc)
+		while(send(sock,(void*)username, lentc, 0) < 0)
+			perror("Errore nell'invio dell'username");
 }
 
 char* receive_username(int sock){
 	uint16_t lenght;
 	char* username=NULL;
 
-	if(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) <0){
+	while(recv(sock, (void*)&lenght, sizeof(uint16_t), 0) < 0)
 		perror("Errore nel ricevere la lunghezza dell'username");
-	}
 
 	if(ntohs(lenght)){
 		username=malloc(ntohs(lenght));
 		memset(username, 0, (ntohs(lenght)));
-		if(recv(sock, (void*)username, ntohs(lenght), 0) <0){
+		while(recv(sock, (void*)username, ntohs(lenght), 0) < 0)
 			perror("Errore nel ricevere l'username");
-		}
 	}
+
 	return username;
 }
 
 void send_uint(int sock, unsigned int valore){
-	unsigned int status=htons(valore);
+	unsigned int uint=htons(valore);
 	
-	if(send(sock, &status, sizeof(status), 0) <0){
-		perror("Errore nell'invio dello status.");
-	}
+	while(send(sock, &uint, sizeof(unsigned int), 0) < 0)
+		perror("Errore nell'invio di un uint");
 }
 
 unsigned int receive_uint(int sock){
-	unsigned int status;
+	unsigned int uint;
 	
-	if(recv(sock, &status, sizeof(unsigned int), 0) <0)
-		perror("Errore nella ricezione dello status");
-	return ntohs(status);
+	while(recv(sock, &uint, sizeof(unsigned int), 0) < 0)
+		perror("Errore nella ricezione di un uint");
+
+	return ntohs(uint);
 }
 
 void send_str(int sock, char* buffer){
@@ -58,9 +53,10 @@ void send_str(int sock, char* buffer){
 	ltos = strlen(buffer)+1;
 	lenght=htons(ltos);
 
-	if(send(sock, &lenght, sizeof(uint16_t), 0) <0)
+	while(send(sock, &lenght, sizeof(uint16_t), 0) < 0)
 		perror("Errore nell'inviare la lunghezza");
-	if(send(sock, buffer, ltos, 0) <0)
+
+	while(send(sock, buffer, ltos, 0) < 0)
 		perror("Errore nell'invio del messaggio");
 }
 
@@ -68,12 +64,13 @@ char* receive_str(int sock){
 	unsigned int lenght;
 	char* buffer;
 
-	if(recv(sock, &lenght, sizeof(uint16_t), 0) <0)
+	while(recv(sock, &lenght, sizeof(uint16_t), 0) < 0)
 		perror("Errore nel ricevere la lunghezza del messaggio");
 
 	buffer=malloc(ntohs(lenght));
 	memset(buffer, 0, ntohs(lenght));
-	if(recv(sock, buffer, ntohs(lenght), 0) <0)
+	while(recv(sock, buffer, ntohs(lenght), 0) < 0)
 		perror("Errore nel ricevere il messaggio");
+
 	return buffer;
 }
