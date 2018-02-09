@@ -1,18 +1,6 @@
 #include "condivisi.h"
 #include "client.h"
 
-#define BUFFER_SIZE 1024
-void* receive_udp(void*);
-void send_offline(int, char*);
-void receive_offmessage(int);
-
-struct thread_args{
-	char* ip;
-	char* port;
-	char* username;
-	int* UDP_sock;
-};
-
 int main(int argc, char** argv){
 	int sock;
 	struct sockaddr_in sv_addr;
@@ -58,14 +46,16 @@ int main(int argc, char** argv){
 		if(!strcmp("!register\0", cmd) && !arg_command){
 			printf("Hai dimenticato a specificare l'username oppure contiene degli spazi\n");
 			continue;
-		}else if(!strcmp("!send\0", cmd) && !username){
-			printf("Non sei ancora registrato, registrati tramite !register <username>\n");
-			continue;
 		}else if(!strcmp("!register\0", cmd) && username!=NULL){
 			printf("Sei già registrato\n");
 			continue;
+		}else if(!strcmp("!send\0", cmd) && !username){
+			printf("Non sei ancora registrato, registrati tramite !register <username>\n");
+			continue;
+		}else if(!strcmp("!send\0", cmd) && username && !strcmp(username, arg_command)){
+			printf("Tentativo di invio messaggio a te stesso\n");
+			continue;
 		}
-
 
 		put_command(sock, cmd);
 
@@ -75,18 +65,18 @@ int main(int argc, char** argv){
 			 * Register command
 			 */
 			register_user(arg_command, sock, argv[1], argv[2]);
-			/*
-				case 1:
-					break;
-				case 2:
-					receive_offmessage(sock);
-					break;
-			}*/
 
+			// Set prompt
 			memset(prompt,0,strlen(prompt));
 			sprintf(prompt, "%s> ", arg_command);
+
+			// Set username
 			username = malloc(strlen(arg_command));
 			sprintf(username, "%s", arg_command);
+
+			/*
+			 * allocazione e inizializzazione struttura per passaggio dati al thread
+			 */
 
 			t_args.ip=malloc(strlen(argv[1]));
 			t_args.port=malloc(strlen(argv[2]));
@@ -152,15 +142,19 @@ int main(int argc, char** argv){
 			username=NULL;
 			memset(prompt,0,strlen(prompt));
 
+			// Deallocazione strutture dati inizializzate
 			free(t_args.username);
 			free(t_args.ip);
 			free(t_args.port);
 			
+			// Cancellazione thread e chiusura socket per i messaggi instantanei
 			pthread_cancel(thread);
 			close(*t_args.UDP_sock);
 			free(t_args.UDP_sock);
 
 			printf("Deregistrazione avvenuta con successo\n");
+
+			// update nuovo prompt
 			sprintf(prompt,"> ");
 		}
 
@@ -192,6 +186,9 @@ void send_online(int sock, char* username){
 		memset(tmp, 0, sizeof(tmp));
 	}
 
+	/*
+	 * Creazione socket per invio messaggi instantanei
+	 */
 	sock_msg=socket(AF_INET, SOCK_DGRAM, 0);
 
 	memset(&sv_addr, 0, sizeof(sv_addr));
@@ -210,6 +207,9 @@ void send_online(int sock, char* username){
 	close(sock_msg);
 }
 
+/*
+ * Ricezione messaggi ricevuti durante periodo offline
+ */
 void receive_offmessage(int sock){
 	char msg[BUFFER_SIZE];
 	char* username;
@@ -232,6 +232,9 @@ void receive_offmessage(int sock){
 	}
 }
 
+/*
+ * Invio del messaggio a utente offline
+ */
 void send_offline(int sock, char* sender){
 	char buffer[BUFFER_SIZE], tmp[BUFFER_SIZE];
 
@@ -249,15 +252,16 @@ void send_offline(int sock, char* sender){
 	send_str(sock, buffer);
 }
 
+/*
+ * Funzione di esecuzione del thread
+ */
 void* receive_udp(void* args){
 	struct sockaddr_in my_addr;
 	int sock;
 	char *buffer, *username=NULL;
 	struct thread_args* t_args = (struct thread_args*)args;
 	
-	char* user=malloc(strlen(t_args->username)+1);
-	sprintf(user, "%s", t_args->username);
-
+	// Creazione socket per ricezione messaggi instantanei
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	t_args->UDP_sock=malloc(sizeof(int));
 	*(t_args->UDP_sock)=sock;
@@ -280,18 +284,21 @@ void* receive_udp(void* args){
 	return NULL;
 }
 
+/*
+ * Invio comando al server
+ */
 void put_command(int sock, char* buffer){
 	
 	uint16_t lenght=htons(strlen(buffer)+1);
 
-	if(send(sock, (void*)&lenght, sizeof(uint16_t),0) <0){
+	if(send(sock, (void*)&lenght, sizeof(uint16_t),0) < 0){
 		perror("Errore nell'invio della lunghezza del comando");
-		exit(1);
+		return;
 	}
 
-	if(send(sock, (void*)buffer, strlen(buffer)+1,0) <0){
+	if(send(sock, (void*)buffer, strlen(buffer)+1,0) < 0){
 		perror("Errore nell'invio del comando");
-		exit(1);
+		return;
 	}
 }
 
@@ -328,8 +335,7 @@ void register_user(char* arg_command, int sock, char* ip, char* port){
 
 	send_username(sock, arg_command);
 
-	// Send ip and port
-	
+	// Invio ip e port
 	send_str(sock, ip);
 	send_str(sock, port);
 	
@@ -352,7 +358,7 @@ void split_command(const char* command, char** arg_command){
 	
 	*(strchr(command, '\n'))='\0';
 
-	//First occurence of ' ', replace with end of string terminator
+	// Sostituzione primo spazio con terminatore stringa
 	tmp = strchr(command, ' ');
 	if(tmp)
 		*tmp='\0';
@@ -365,7 +371,7 @@ void split_command(const char* command, char** arg_command){
 		return;
 	}
 	
-	//Copy argument of command
+	// Copia argomento comando (!register)
 	*arg_command=malloc(strlen(tmp+1)+1);
 	sprintf(*arg_command, "%s", tmp+1);
 }

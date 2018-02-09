@@ -321,7 +321,6 @@ void get_command(int sock, char* buffer, struct users *utenti, fd_set* master){
 	
 	if(ret<0){
 		perror("Errore nel ricevere la lunghezza del comando");
-		exit(1);
 	}else if(!ret){
 		/*
 		 * Comportamento anomalo durante l'attesa di un comando
@@ -350,11 +349,9 @@ void get_command(int sock, char* buffer, struct users *utenti, fd_set* master){
 		return;
 	}
 
-
 	// Ricezione del comando
 	if(recv(sock, (void*)buffer, ntohs(lenght),0) < 0){
 		perror("Errore nel ricevere il comando");
-		exit(1);
 	}
 	return;
 }
