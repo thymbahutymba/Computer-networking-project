@@ -367,7 +367,7 @@ void split_command(const char* command, char** arg_command){
 	}
 
 	//L'username non puo` contenere spazi
-	if(strchr(tmp+1,' ')){
+	if(!(int)strlen(tmp+1) || strchr(tmp+1,' ')){
 		return;
 	}
 	
