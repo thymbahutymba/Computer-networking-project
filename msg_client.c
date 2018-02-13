@@ -167,6 +167,7 @@ int main(int argc, char** argv){
 		free(arg_command);
 		arg_command=NULL;
 	}
+	return 0;
 }
 
 void send_online(int sock, char* username){
