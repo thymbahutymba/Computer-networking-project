@@ -52,9 +52,14 @@ int main(int argc, char** argv){
 		}else if(!strcmp("!send\0", cmd) && !username){
 			printf("Non sei ancora registrato, registrati tramite !register <username>\n");
 			continue;
-		}else if(!strcmp("!send\0", cmd) && username && !strcmp(username, arg_command)){
-			printf("Tentativo di invio messaggio a te stesso\n");
-			continue;
+		}else if(!strcmp("!send\0", cmd) && username){
+			if(arg_command==NULL || !strlen(arg_command)){
+				printf("Nessun username specificato per l'invio del messaggio\n");
+				continue;
+			}else if(!strcmp(username, arg_command)){
+				printf("Tentativo di invio messaggio a te stesso\n");
+				continue;
+			}
 		}
 
 		put_command(sock, cmd);
@@ -366,7 +371,9 @@ void split_command(const char* command, char** arg_command){
 		return;
 	}
 
-	//L'username non puo` contenere spazi
+	/*
+	 * Secondo parametro non valido se contiene spazi
+	 */
 	if(!(int)strlen(tmp+1) || strchr(tmp+1,' ')){
 		return;
 	}

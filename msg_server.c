@@ -321,6 +321,7 @@ void get_command(int sock, char* buffer, struct users *utenti, fd_set* master){
 	
 	if(ret<0){
 		perror("Errore nel ricevere la lunghezza del comando");
+		return;
 	}else if(!ret){
 		/*
 		 * Comportamento anomalo durante l'attesa di un comando
