@@ -69,29 +69,29 @@ int main(int argc, char** argv){
 			/*
 			 * Register command
 			 */
-			register_user(arg_command, sock, argv[1], argv[2]);
+			if(!register_user(arg_command, sock, argv[1], argv[2])){
 
-			// Set prompt
-			memset(prompt,0,strlen(prompt));
-			sprintf(prompt, "%s> ", arg_command);
+				// Set prompt
+				memset(prompt,0,strlen(prompt));
+				sprintf(prompt, "%s> ", arg_command);
 
-			// Set username
-			username = malloc(strlen(arg_command));
-			sprintf(username, "%s", arg_command);
+				// Set username
+				username = malloc(strlen(arg_command));
+				sprintf(username, "%s", arg_command);
 
-			/*
-			 * allocazione e inizializzazione struttura per passaggio dati al thread
-			 */
+				/*
+			 	 * allocazione e inizializzazione struttura per passaggio dati al thread
+			 	 */
 
-			t_args.ip=malloc(strlen(argv[1]));
-			t_args.port=malloc(strlen(argv[2]));
-			t_args.username=malloc(strlen(username));
+				t_args.ip=malloc(strlen(argv[1]));
+				t_args.port=malloc(strlen(argv[2]));
+				t_args.username=malloc(strlen(username));
 
-			sprintf(t_args.ip, "%s", argv[1]);
-			sprintf(t_args.port, "%s", argv[2]);
-			sprintf(t_args.username, "%s", username);
-			pthread_create(&thread, NULL, receive_udp, (void*)&t_args);
-
+				sprintf(t_args.ip, "%s", argv[1]);
+				sprintf(t_args.port, "%s", argv[2]);
+				sprintf(t_args.username, "%s", username);
+				pthread_create(&thread, NULL, receive_udp, (void*)&t_args);
+			}
 		}else if(!strcmp("!send\0", cmd)){
 			
 			/*
@@ -336,7 +336,7 @@ void who_command(int sock, char* mio_username){
 	free(status);
 }
 
-void register_user(char* arg_command, int sock, char* ip, char* port){
+int register_user(char* arg_command, int sock, char* ip, char* port){
 	unsigned int result;
 
 	send_username(sock, arg_command);
@@ -352,11 +352,12 @@ void register_user(char* arg_command, int sock, char* ip, char* port){
 			break;
 		case 1:
 			printf("Registrazione fallita, username già presente\n");
-			break;
+			return 1;
 		case 2:
 			printf("Riconnessione avvenuta con successo\n");
 			receive_offmessage(sock);
 	}
+	return 0;
 }
 
 void split_command(const char* command, char** arg_command){

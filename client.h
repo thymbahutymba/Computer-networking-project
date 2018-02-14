@@ -19,7 +19,7 @@ struct thread_args{
 void welcome(const char*,const char*,const char*);
 void stampacomandi();
 void split_command(const char*, char**);
-void register_user(char*, int, char*, char*);
+int register_user(char*, int, char*, char*);
 void who_command(int, char*);
 void put_command(int, char*);
 void send_online(int, char*);
